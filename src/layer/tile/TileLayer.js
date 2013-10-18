@@ -248,8 +248,19 @@ L.TileLayer = L.Class.extend({
 	},
 
 	_reset: function (e) {
-		for (var key in this._tiles) {
-			this.fire('tileunload', {tile: this._tiles[key]});
+		var key;
+		if (L.Browser.android && (this.options.unloadInvisibleTiles || this.options.reuseTiles)) {
+			if (!this._tilesToUnload) {
+				this._tilesToUnload = [];
+			}
+			for (key in this._tiles) {
+				this._tilesToUnload.push(this._tiles[key]);
+			}
+		}
+		else {
+			for (key in this._tiles) {
+				this.fire('tileunload', {tile: this._tiles[key]});
+			}
 		}
 
 		this._tiles = {};
@@ -384,7 +395,20 @@ L.TileLayer = L.Class.extend({
 
 	_removeTile: function (key) {
 		var tile = this._tiles[key];
+		this._unloadTile(tile);
+		delete this._tiles[key];
+	},
 
+	_unloadTiles: function () {
+		if (this._tilesToUnload) {
+			for (var i = 0; i < this._tilesToUnload.length; i++) {
+				this._unloadTile(this._tilesToUnload[i]);
+			}
+			this._tilesToUnload = [];
+		}
+	},
+
+	_unloadTile: function (tile) {
 		this.fire('tileunload', {tile: tile, url: tile.src});
 
 		if (this.options.reuseTiles) {
@@ -396,12 +420,12 @@ L.TileLayer = L.Class.extend({
 		}
 
 		// for https://github.com/CloudMade/Leaflet/issues/137
-		if (!L.Browser.android) {
-			tile.onload = null;
-			tile.src = L.Util.emptyImageUrl;
-		}
-
-		delete this._tiles[key];
+// Not sure if doing this unconditionally is OK for all Android devices
+// It seems OK for 4.1.1 and 4.1.2 
+//		if (!L.Browser.android) {
+		tile.onload = null;
+		tile.src = L.Util.emptyImageUrl;
+//		}
 	},
 
 	_addTile: function (tilePoint, container) {
@@ -530,6 +554,9 @@ L.TileLayer = L.Class.extend({
 				// clear scaled tiles after all new tiles are loaded (for performance)
 				clearTimeout(this._clearBgBufferTimer);
 				this._clearBgBufferTimer = setTimeout(L.bind(this._clearBgBuffer, this), 500);
+			}
+			if (L.Browser.android) {
+				this._unloadTiles();
 			}
 		}
 	},
