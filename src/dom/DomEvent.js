@@ -41,7 +41,7 @@ L.DomEvent = {
 
 				obj.addEventListener(newType, handler, false);
 
-			} else if (type === 'click' && L.Browser.android) {
+			} else if (type === 'click' && L.Browser.android && !L.Browser.chrome) {
 				originalHandler = handler;
 				handler = function (e) {
 					return L.DomEvent._filterClick(e, originalHandler);
@@ -218,7 +218,7 @@ L.DomEvent = {
 		return e;
 	},
 
-	// this is a horrible workaround for a bug in Android where a single touch triggers two click events
+	// this is a horrible workaround for the feature in Android where a single touch triggers two click events
 	_filterClick: function (e, handler) {
 		var timeStamp = (e.timeStamp || e.originalEvent.timeStamp),
 			elapsed = L.DomEvent._lastClick && (timeStamp - L.DomEvent._lastClick);
@@ -228,7 +228,7 @@ L.DomEvent = {
 		// on the same event should be triggered far faster;
 		// or check if click is simulated on the element, and if it is, reject any non-simulated events
 
-		if ((elapsed && elapsed > 100 && elapsed < 1000) || (e.target._simulatedClick && !e._simulated)) {
+		if ((elapsed && elapsed > 100 && elapsed < 500) || !e._simulated) {
 			L.DomEvent.stop(e);
 			return;
 		}
