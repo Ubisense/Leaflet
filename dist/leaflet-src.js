@@ -4359,8 +4359,44 @@ L.layerGroup = function (layers) {
 L.FeatureGroup = L.LayerGroup.extend({
 	includes: L.Mixin.Events,
 
-	statics: {
-		EVENTS: 'click dblclick mouseover mouseout mousemove contextmenu popupopen popupclose'
+	initialize: function (layers) {
+		this._eventTypes = '';
+
+		L.LayerGroup.prototype.initialize.call(this, layers);
+	},
+
+	addEventListener: function (types, fn, context) { // (String, Function[, Object]) or (Object[, Object])
+
+		// types can be a map of types/handlers
+		if (L.Util.invokeEach(types, this.addEventListener, this, fn, context)) { return this; }
+
+		//keep track of event types we're listening for 
+		var i, type,
+		    newTypes = '',
+		    typesArray = L.Util.splitWords(types);
+		for (i in typesArray) {
+			type = typesArray[i];
+			if (!this.hasEventListeners(type)) {
+				//listener for a new event type. 
+				this._eventTypes = (this._eventTypes || '') + type + ' ';
+				newTypes = type + ' ';
+			}
+		}
+		//make sure layers propagate back events for the new types we're registering
+		if (newTypes !== '') {
+			this.eachLayer(function (layer) {
+				if ('on' in layer) {
+					layer.on(newTypes, this._propagateEvent, this);
+				}
+			}, this);
+		}
+
+		//call mixin method
+		return L.Mixin.Events.addEventListener.call(this, types, fn, context);
+	},
+
+	on: function (types, fn, context) { // (String, Function[, Object]) or (Object[, Object])
+		return this.addEventListener(types, fn, context);
 	},
 
 	addLayer: function (layer) {
@@ -4369,7 +4405,7 @@ L.FeatureGroup = L.LayerGroup.extend({
 		}
 
 		if ('on' in layer) {
-			layer.on(L.FeatureGroup.EVENTS, this._propagateEvent, this);
+			layer.on(this._eventTypes, this._propagateEvent, this);
 		}
 
 		L.LayerGroup.prototype.addLayer.call(this, layer);
@@ -4390,7 +4426,7 @@ L.FeatureGroup = L.LayerGroup.extend({
 		}
 
 		if ('off' in layer) {
-			layer.off(L.FeatureGroup.EVENTS, this._propagateEvent, this);
+			layer.off(this._eventTypes, this._propagateEvent, this);
 		}
 
 		L.LayerGroup.prototype.removeLayer.call(this, layer);
@@ -5747,7 +5783,7 @@ L.polygon = function (latlngs, options) {
 		return L.FeatureGroup.extend({
 
 			initialize: function (latlngs, options) {
-				this._layers = {};
+				L.FeatureGroup.prototype.initialize.call(this, null);
 				this._options = options;
 				this.setLatLngs(latlngs);
 			},
@@ -6083,7 +6119,7 @@ L.GeoJSON = L.FeatureGroup.extend({
 	initialize: function (geojson, options) {
 		L.setOptions(this, options);
 
-		this._layers = {};
+		L.FeatureGroup.prototype.initialize.call(this, null);
 
 		if (geojson) {
 			this.addData(geojson);
@@ -6405,7 +6441,7 @@ L.DomEvent = {
 
 				obj.addEventListener(newType, handler, false);
 
-			} else if (type === 'click' && L.Browser.android) {
+			} else if (type === 'click' && L.Browser.android && !L.Browser.chrome) {
 				originalHandler = handler;
 				handler = function (e) {
 					return L.DomEvent._filterClick(e, originalHandler);
@@ -6578,7 +6614,7 @@ L.DomEvent = {
 		return e;
 	},
 
-	// this is a horrible workaround for a bug in Android where a single touch triggers two click events
+	// this is a horrible workaround for the feature in Android where a single touch triggers two click events
 	_filterClick: function (e, handler) {
 		var timeStamp = (e.timeStamp || e.originalEvent.timeStamp),
 			elapsed = L.DomEvent._lastClick && (timeStamp - L.DomEvent._lastClick);
@@ -6588,7 +6624,7 @@ L.DomEvent = {
 		// on the same event should be triggered far faster;
 		// or check if click is simulated on the element, and if it is, reject any non-simulated events
 
-		if ((elapsed && elapsed > 100 && elapsed < 500) || (e.target._simulatedClick && !e._simulated)) {
+		if ((elapsed && elapsed > 100 && elapsed < 500) || !e._simulated) {
 			L.DomEvent.stop(e);
 			return;
 		}
